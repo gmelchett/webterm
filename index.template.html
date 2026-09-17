@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTerm - WASM Shell</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+        }
+
+        .terminal-window {
+            width: 100%;
+            max-width: 900px;
+            height: 85vh;
+            background: #0d0d0d;
+            border-radius: 12px;
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 100px rgba(0, 255, 128, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background: linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid #1a1a1a;
+            user-select: none;
+        }
+
+        .terminal-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .terminal-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .terminal-btn:hover {
+            filter: brightness(1.2);
+        }
+
+        .btn-close { background: #ff5f56; }
+        .btn-minimize { background: #ffbd2e; }
+        .btn-maximize { background: #27c93f; }
+
+        .terminal-title {
+            color: #999;
+            font-size: 13px;
+            font-weight: 500;
+            flex: 1;
+            text-align: center;
+        }
+
+        .terminal-body {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #e0e0e0;
+            scroll-behavior: smooth;
+        }
+
+        .terminal-body::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal-body::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+
+        .terminal-body::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .output-line {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .prompt-line {
+            display: flex;
+            align-items: flex-start;
+            margin-top: 4px;
+        }
+
+        .prompt-text {
+            color: #27c93f;
+            font-weight: bold;
+            white-space: pre;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .command-input {
+            background: transparent;
+            border: none;
+            color: #e0e0e0;
+            font-family: inherit;
+            font-size: inherit;
+            outline: none;
+            width: 100%;
+            caret-color: #27c93f;
+        }
+
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .loading-text {
+            color: #27c93f;
+            font-family: 'Cascadia Code', monospace;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .loading-bar {
+            width: 200px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #27c93f, #00ff88);
+            width: 0%;
+            animation: loading 2s ease-out forwards;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .ansi-bold { font-weight: bold; }
+        .ansi-red { color: #ff5555; }
+        .ansi-green { color: #50fa7b; }
+        .ansi-yellow { color: #f1fa8c; }
+        .ansi-blue { color: #6272a4; }
+        .ansi-magenta { color: #ff79c6; }
+        .ansi-cyan { color: #8be9fd; }
+        .ansi-white { color: #f8f8f2; }
+        .ansi-bg-red { background-color: #ff5555; }
+        .ansi-bg-green { background-color: #50fa7b; }
+        .ansi-bg-blue { background-color: #6272a4; }
+    </style>
+</head>
+<body>
+    <div class="terminal-window">
+        <div class="terminal-header">
+            <div class="terminal-buttons">
+                <button class="terminal-btn btn-close" title="Close"></button>
+                <button class="terminal-btn btn-minimize" title="Minimize"></button>
+                <button class="terminal-btn btn-maximize" title="Maximize"></button>
+            </div>
+            <div class="terminal-title">guest@wsh: ~/</div>
+        </div>
+        <div class="terminal-body" id="terminal">
+            <div id="output"></div>
+            <div class="prompt-line" id="input-line">
+                <span class="prompt-text" id="prompt"></span>
+                <div class="input-wrapper">
+                    <input type="text"
+                           class="command-input"
+                           id="command-input"
+                           autocomplete="off"
+                           autocapitalize="off"
+                           spellcheck="false"
+                           autofocus>
+                </div>
+            </div>
+        </div>
+        <div class="loading-overlay" id="loading">
+            <div class="loading-text">Loading WASM Shell...</div>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="shell.js"></script>
+    <script>
+        let myModule = null;
+        let shellInit = null;
+        let shellExecute = null;
+        let shellGetPrompt = null;
+        let shellGetOutput = null;
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        const terminal = document.getElementById('terminal');
+        const output = document.getElementById('output');
+        const promptEl = document.getElementById('prompt');
+        const input = document.getElementById('command-input');
+        const loading = document.getElementById('loading');
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function parseAnsi(text) {
+            let html = escapeHtml(text);
+            html = html.replace(/\x1b\[1;32m/g, '<span class="ansi-bold ansi-green">');
+            html = html.replace(/\x1b\[1;33m/g, '<span class="ansi-bold ansi-yellow">');
+            html = html.replace(/\x1b\[1;34m/g, '<span class="ansi-bold ansi-blue">');
+            html = html.replace(/\x1b\[1;36m/g, '<span class="ansi-bold ansi-cyan">');
+            html = html.replace(/\x1b\[0m/g, '</span>');
+            html = html.replace(/\x1b\[2J\x1b\[H/g, '');
+            return html;
+        }
+
+        function appendOutput(text) {
+            const div = document.createElement('div');
+            div.className = 'output-line';
+            div.innerHTML = parseAnsi(text);
+            output.appendChild(div);
+        }
+
+        function scrollToBottom() {
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function updatePrompt() {
+            if (shellGetPrompt) {
+                const raw = myModule.UTF8ToString(shellGetPrompt());
+                promptEl.innerHTML = parseAnsi(raw);
+            }
+        }
+
+        function addInputToOutput(cmd) {
+            const line = document.createElement('div');
+            line.className = 'output-line';
+            line.innerHTML = promptEl.innerHTML + escapeHtml(cmd);
+            output.appendChild(line);
+        }
+
+        function executeCommand(cmd) {
+            if (!shellExecute) return;
+
+            if (cmd.trim()) {
+                commandHistory.push(cmd);
+                historyIndex = commandHistory.length;
+            }
+
+            addInputToOutput(cmd);
+
+            const result = shellExecute(cmd);
+            if (result) {
+                const text = myModule.UTF8ToString(result);
+                if (text) appendOutput(text);
+            }
+
+            updatePrompt();
+            scrollToBottom();
+        }
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const cmd = input.value;
+                input.value = '';
+                executeCommand(cmd);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    input.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    input.value = commandHistory[historyIndex];
+                } else {
+                    historyIndex = commandHistory.length;
+                    input.value = '';
+                }
+            } else if (e.key === 'l' && e.ctrlKey) {
+                e.preventDefault();
+                output.innerHTML = '';
+                updatePrompt();
+            } else if (e.key === 'c' && e.ctrlKey) {
+                e.preventDefault();
+                addInputToOutput(input.value + '^C');
+                input.value = '';
+                updatePrompt();
+            }
+        });
+
+        terminal.addEventListener('click', function() {
+            input.focus();
+        });
+
+        myModule = {
+            onRuntimeInitialized: function() {
+                shellInit = myModule.cwrap('shell_init', null, []);
+                shellExecute = myModule.cwrap('shell_execute', 'number', ['string']);
+                shellGetPrompt = myModule.cwrap('shell_get_prompt', 'number', []);
+                shellGetOutput = myModule.cwrap('shell_get_output', 'number', []);
+
+                shellInit();
+                const welcome = myModule.UTF8ToString(shellGetOutput());
+                if (welcome) appendOutput(welcome);
+                updatePrompt();
+
+                loading.classList.add('hidden');
+                input.focus();
+                scrollToBottom();
+            }
+        };
+        WebTermModule(myModule);
+    </script>
+</body>
+</html>
