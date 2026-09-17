@@ -44,6 +44,11 @@
             gap: 12px;
             border-bottom: 1px solid #1a1a1a;
             user-select: none;
+            cursor: grab;
+        }
+
+        .terminal-header:active {
+            cursor: grabbing;
         }
 
         .terminal-buttons {
@@ -199,6 +204,85 @@
         .ansi-bg-red { background-color: #ff5555; }
         .ansi-bg-green { background-color: #50fa7b; }
         .ansi-bg-blue { background-color: #6272a4; }
+
+        /* Maximized state: fill the whole viewport (toggle via maximize button) */
+        .terminal-window.maximized {
+            max-width: none;
+            height: 100vh;
+            height: 100dvh;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        body.maximized {
+            padding: 0;
+        }
+
+        /* Minimized (Windows 3.x style): window shrinks to an icon bottom-left */
+        .taskbar-icon {
+            position: fixed;
+            left: 8px;
+            bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%);
+            border: 1px solid #1a1a1a;
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: #bbb;
+            font-size: 13px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 50;
+            user-select: none;
+        }
+
+        .taskbar-icon:active {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+        }
+
+        .taskbar-icon .icon-glyph {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            background: linear-gradient(135deg, #27c93f, #00ff88);
+            flex: 0 0 auto;
+        }
+
+        .taskbar-icon .icon-title {
+            white-space: nowrap;
+        }
+
+        /* Dragging: hide the real window, show a square ghost of the same size */
+        .terminal-window.dragging {
+            visibility: hidden;
+        }
+
+        .drag-ghost {
+            position: fixed;
+            border: 2px dashed rgba(39, 201, 63, 0.9);
+            background: rgba(13, 13, 13, 0.45);
+            border-radius: 12px;
+            z-index: 60;
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+
+        /* On small devices (phones) maximize by default */
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+            .terminal-window {
+                max-width: none;
+                height: 100vh;
+                height: 100dvh;
+                border-radius: 0;
+                box-shadow: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -234,7 +318,14 @@
         </div>
     </div>
 
-    <script src="shell.js"></script>
+<div class="taskbar-icon hidden" id="taskbar-icon" title="Restore">
+    <span class="icon-glyph"></span>
+    <span class="icon-title">guest@wsh: ~/</span>
+</div>
+
+<div class="drag-ghost hidden" id="drag-ghost"></div>
+
+<script src="shell.js"></script>
     <script>
         let myModule = null;
         let shellInit = null;
@@ -345,6 +436,113 @@
         });
 
         terminal.addEventListener('click', function() {
+            input.focus();
+        });
+
+        const win = document.querySelector('.terminal-window');
+        const maximizeBtn = document.querySelector('.btn-maximize');
+
+        function setMaximized(max) {
+            resetPositionStyles();
+            win.classList.toggle('maximized', max);
+            document.body.classList.toggle('maximized', max);
+            maximizeBtn.title = max ? 'Restore' : 'Maximize';
+        }
+
+        maximizeBtn.addEventListener('click', function() {
+            setMaximized(!win.classList.contains('maximized'));
+            scrollToBottom();
+        });
+
+        // On small devices (phones) maximize the terminal by default
+        const smallScreen = window.matchMedia('(max-width: 768px)');
+        if (smallScreen.matches) {
+            setMaximized(true);
+        }
+        smallScreen.addEventListener('change', function(e) {
+            setMaximized(e.matches);
+        });
+
+        const minimizeBtn = document.querySelector('.btn-minimize');
+        const taskbarIcon = document.getElementById('taskbar-icon');
+
+        function setMinimized(min) {
+            win.classList.toggle('hidden', min);
+            taskbarIcon.classList.toggle('hidden', !min);
+            if (!min) input.focus();
+        }
+
+        minimizeBtn.addEventListener('click', function() {
+            setMinimized(!win.classList.contains('hidden'));
+        });
+
+        taskbarIcon.addEventListener('click', function() {
+            setMinimized(false);
+            scrollToBottom();
+        });
+
+        // Drag the window by its title bar (Windows 3.x style)
+        const header = document.querySelector('.terminal-header');
+        const dragGhost = document.getElementById('drag-ghost');
+        let dragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let dragW = 0;
+        let dragH = 0;
+
+        function resetPositionStyles() {
+            win.style.position = '';
+            win.style.left = '';
+            win.style.top = '';
+            win.style.width = '';
+            win.style.height = '';
+            win.style.margin = '';
+        }
+
+        function positionGhost(clientX, clientY) {
+            let left = clientX - dragOffsetX;
+            let top = clientY - dragOffsetY;
+            left = Math.max(0, Math.min(left, window.innerWidth - dragW));
+            top = Math.max(0, Math.min(top, window.innerHeight - dragH));
+            dragGhost.style.left = left + 'px';
+            dragGhost.style.top = top + 'px';
+        }
+
+        header.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            if (e.target.closest('.terminal-btn')) return;
+            const rect = win.getBoundingClientRect();
+            dragW = rect.width;
+            dragH = rect.height;
+            win.style.position = 'fixed';
+            win.style.left = rect.left + 'px';
+            win.style.top = rect.top + 'px';
+            win.style.width = dragW + 'px';
+            win.style.height = dragH + 'px';
+            win.style.margin = '0';
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            dragGhost.style.width = dragW + 'px';
+            dragGhost.style.height = dragH + 'px';
+            positionGhost(e.clientX, e.clientY);
+            dragGhost.classList.remove('hidden');
+            win.classList.add('dragging');
+            dragging = true;
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            positionGhost(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mouseup', function() {
+            if (!dragging) return;
+            dragging = false;
+            win.style.left = dragGhost.style.left;
+            win.style.top = dragGhost.style.top;
+            win.classList.remove('dragging');
+            dragGhost.classList.add('hidden');
             input.focus();
         });
 
