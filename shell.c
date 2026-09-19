@@ -14,7 +14,7 @@
 #define MAX_CMD_LEN 1024
 #define MAX_ARGS 64
 #define MAX_HISTORY 100
-#define MAX_PATH 512
+#define MAX_PATH 2048
 #define MAX_ENV_VARS 32
 #define MAX_FILES 64
 #define MAX_FILE_CONTENT 4096
@@ -400,13 +400,13 @@ static void cmd_neofetch(void) {
     output_append(
         "\033[1;32m        .--.        \033[0m  \033[1;33mguest\033[0m@\033[1;33mwebterm-wasm\033[0m\n"
         "\033[1;32m       |o_o |       \033[0m  ----------------------\n"
-        "\033[1;32m       |:_/ |       \033[0m  \033[1;33mOS:\033[0m      WASM Linux 1.0\n"
-        "\033[1;32m      //   \\ \\      \033[0m  \033[1;33mHost:\033[0m    Web Browser\n"
+        "\033[1;32m       |:_/ |       \033[0m  \033[1;33mOS:\033[0m       WASM Linux 1.0\n"
+        "\033[1;32m      //   \\ \\      \033[0m  \033[1;33mHost:\033[0m     Web Browser\n"
         "\033[1;32m     (|     | )     \033[0m  \033[1;33mKernel:\033[0m   WebAssembly\n"
         "\033[1;32m    /'\\_   _/`\\     \033[0m  \033[1;33mShell:\033[0m    wsh 1.0\n"
         "\033[1;32m    \\___)=(___/     \033[0m  \033[1;33mTerminal:\033[0m webterm\n"
-        "\033[0m                     \033[0m  \033[1;33mCPU:\033[0m      WasmCPU @ 1GHz\n"
-        "\033[0m                     \033[0m  \033[1;33mMemory:\033[0m   256MB / 256MB\n"
+        "\033[0m                    \033[0m  \033[1;33mCPU:\033[0m      WasmCPU @ 1GHz\n"
+        "\033[0m                    \033[0m  \033[1;33mMemory:\033[0m   256MB / 256MB\n"
     );
 }
 
